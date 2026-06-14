@@ -7,75 +7,58 @@ import time
 import os
 import json
 
-# --- Import Backend Logic ---
 from get_messages import FetchRunner
 from delete_message import MessageDeleter
 
-# --- Global Configuration ---
 ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
 
-
 class TextRedirector:
-    """Redirects print statements to the GUI log window."""
-
     def __init__(self, q):
         self.q = q
-
     def write(self, string):
         self.q.put(string)
-
     def flush(self):
         pass
-
 
 class DiscordCleanerApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.title("DMD")
+        self.title("DMD - Smart Batch Edition")
         self.geometry("700x700")
-
         self.running = False
+        
         self.log_queue = queue.Queue()
 
-        # --- GUI Layout ---
-
-        # 1. Input Section
         self.input_frame = ctk.CTkFrame(self)
         self.input_frame.pack(side="top", fill="x", padx=20, pady=(20, 10))
 
-        self.lbl_instruction = ctk.CTkLabel(self.input_frame, text="Paste your Discord 'fetch' command here:",
-                                            font=("Roboto", 14, "bold"))
+        self.lbl_instruction = ctk.CTkLabel(self.input_frame, text="Paste your Discord 'fetch' command here:", font=("Roboto", 14, "bold"))
         self.lbl_instruction.pack(anchor="w", padx=10, pady=(10, 5))
 
         self.txt_fetch = ctk.CTkTextbox(self.input_frame, height=120, font=("Consolas", 12))
         self.txt_fetch.pack(fill="x", padx=10, pady=(0, 10))
 
-        # 2. Control Section
         self.control_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.control_frame.pack(side="top", fill="x", padx=20, pady=10)
 
         self.btn_start = ctk.CTkButton(self.control_frame, text="Start Cleaning", command=self.start_process,
-                                       fg_color="#2CC985", hover_color="#229A66", font=("Roboto", 15, "bold"),
-                                       height=50)
+                                       fg_color="#2CC985", hover_color="#229A66", font=("Roboto", 15, "bold"), height=50)
         self.btn_start.pack(fill="x", padx=0)
 
         self.lbl_status = ctk.CTkLabel(self, text="Status: Idle", text_color="gray", font=("Roboto", 12))
         self.lbl_status.pack(side="top", pady=5)
 
-        # 3. Log Section
         self.log_frame = ctk.CTkFrame(self)
         self.log_frame.pack(side="top", fill="both", expand=True, padx=20, pady=(10, 20))
 
         self.lbl_logs = ctk.CTkLabel(self.log_frame, text="Process Logs:", font=("Roboto", 12, "bold"))
         self.lbl_logs.pack(anchor="w", padx=10, pady=(5, 0))
 
-        self.log_area = ctk.CTkTextbox(self.log_frame, state='disabled', font=("Consolas", 11),
-                                       activate_scrollbars=True)
+        self.log_area = ctk.CTkTextbox(self.log_frame, state='disabled', font=("Consolas", 11), activate_scrollbars=True)
         self.log_area.pack(fill="both", expand=True, padx=10, pady=5)
 
-        # 4. Footer
         self.footer_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.footer_frame.pack(side="bottom", fill="x", padx=20, pady=10)
 
@@ -115,7 +98,6 @@ class DiscordCleanerApp(ctk.CTk):
         self.txt_fetch.configure(state="disabled")
         self.lbl_status.configure(text="Status: Running...", text_color="#2CC985")
 
-        # Run in separate thread
         threading.Thread(target=self.run_logic_loop, args=(fetch_content,), daemon=True).start()
 
     def run_logic_loop(self, fetch_content):
@@ -123,51 +105,53 @@ class DiscordCleanerApp(ctk.CTk):
         sys.stdout = TextRedirector(self.log_queue)
 
         try:
-            print("--- Initializing (Fully RAM Secure) ---")
-
+            print("--- Initializing Continuous Pagination System ---")
+            
             batch_count = 1
+            offset = 0
+            is_search = "search?" in fetch_content
 
             while True:
-                print(f"\n=== STARTING BATCH {batch_count} ===")
-
-                print("1. Fetching messages...")
+                print(f"\n=== FETCHING BATCH {batch_count} (Offset: {offset}) ===")
                 fetcher = FetchRunner(fetch_content=fetch_content)
+                
+                raw_data = fetcher.run(offset=offset if is_search else None)
 
-                # Capture data directly in variable
-                messages_data = fetcher.run()
-
-                if not messages_data:
-                    # If None (error) or empty list
-                    print("   -> No messages found or error occurred. Stopping.")
+                if not raw_data:
+                    print(" -> No data received or end of history reached. Stopping.")
                     break
 
-                # Calculate count based on structure
-                count = 0
-                if isinstance(messages_data, list):
-                    count = len(messages_data)
-                elif isinstance(messages_data, dict):
-                    count = len(messages_data.get('messages', []))
+                all_messages = []
+                if is_search:
+                    search_blocks = raw_data.get('messages', [])
+                    for block in search_blocks:
+                        for msg in block:
+                            if msg.get('hit') is True:
+                                all_messages.append(msg)
+                else:
+                    all_messages = raw_data.get('messages', []) if isinstance(raw_data, dict) else raw_data
 
-                print(f"   -> Found {count} messages.")
-
-                if count == 0:
-                    print("   -> Channel clean! Stopping.")
+                if not all_messages:
+                    print(" -> No more matching messages found. Channel clean!")
                     break
 
-                print("2. Sleeping 10s...")
-                time.sleep(10)
+                print(f" -> Successfully extracted {len(all_messages)} target messages from API.")
 
-                print(f"3. Deleting {count} messages...")
-                # Pass both the Auth string AND the message data to deleter
-                deleter = MessageDeleter(fetch_content=fetch_content, messages_data=messages_data)
+                deleter = MessageDeleter(fetch_content=fetch_content, messages_data=all_messages)
                 deleter.run()
 
-                print("   -> Restarting in 2s...")
+                if is_search:
+                    offset += 25  
+                else:
+                    print(" -> Error: Standard history pagination requires before_id update layout.")
+                    break
+
+                print(" -> Batch completed. Waiting 5 seconds before pulling next historical batch...")
+                time.sleep(5)
                 batch_count += 1
-                time.sleep(2)
 
         except Exception as e:
-            print(f"\nERROR: {e}")
+            print(f"\nCRITICAL FAILURE: {e}")
             import traceback
             traceback.print_exc()
         finally:
@@ -179,7 +163,7 @@ class DiscordCleanerApp(ctk.CTk):
         self.btn_start.configure(state="normal", text="Start Cleaning")
         self.txt_fetch.configure(state="normal")
         self.lbl_status.configure(text="Status: Finished / Idle", text_color="gray")
-        print("\n=== Process Finished ===")
+        print("\n=== Tasks Completed Cleanly ===")
 
 
 if __name__ == "__main__":
