@@ -5,7 +5,6 @@ import ast
 import time
 import random
 
-
 class MessageDeleter:
     def __init__(self, fetch_content, messages_data):
         """
@@ -21,14 +20,10 @@ class MessageDeleter:
         """Main execution method."""
         print("--- Starting Message Deletion Process ---")
 
-        # 1. Parse the headers/auth directly from the RAM string
         if not self._parse_fetch_headers():
             return
 
-        # 2. Process the raw data into a flat list
         self._load_messages_from_memory()
-
-        # 3. Iterate and delete
         self._process_deletions()
 
     def _parse_fetch_headers(self):
@@ -38,7 +33,6 @@ class MessageDeleter:
             return False
 
         content = self.fetch_content
-
         start_index = content.find('{')
         end_index = content.rfind('}')
 
@@ -61,13 +55,11 @@ class MessageDeleter:
             return False
 
     def _load_messages_from_memory(self):
-        """Flattens the message data structure."""
+        """Flattens and filters out non-deletable system messages."""
         if not self.raw_data:
             print("No data provided to deleter.")
             return
 
-        # Support both flat lists and nested lists (from pagination)
-        # Discord API usually returns a list of messages directly, or a dict with "messages" key
         if isinstance(self.raw_data, dict):
             raw_messages = self.raw_data.get('messages', [])
         elif isinstance(self.raw_data, list):
@@ -75,18 +67,26 @@ class MessageDeleter:
         else:
             raw_messages = []
 
-        self.messages_to_delete = []
-
+        temp_list = []
         for item in raw_messages:
             if isinstance(item, list):
-                self.messages_to_delete.extend(item)
+                temp_list.extend(item)
             else:
-                self.messages_to_delete.append(item)
+                temp_list.append(item)
 
-        print(f"Found {len(self.messages_to_delete)} messages to delete.")
+        self.messages_to_delete = []
+        for msg in temp_list:
+                        msg_type = msg.get('type', 0)
+            
+            if msg_type not in [0, 19]:
+                continue
+            
+            self.messages_to_delete.append(msg)
+
+        print(f"Filtered out system messages. Found {len(self.messages_to_delete)} deletable messages.")
 
     def _process_deletions(self):
-        """Loops through messages and sends DELETE requests."""
+        """Loops through messages and sends DELETE requests with dynamic pacing."""
         total = len(self.messages_to_delete)
 
         for index, msg in enumerate(self.messages_to_delete):
@@ -100,22 +100,22 @@ class MessageDeleter:
                     continue
 
                 url = f"https://discord.com/api/v9/channels/{channel_id}/messages/{message_id}"
-
-                print(f"[{index + 1}/{total}] Deleting: {content[:50]}...")
+                print(f"[{index + 1}/{total}] Deleting: {content[:40]}...")
 
                 response = requests.delete(url, headers=self.headers)
 
                 if response.status_code in [200, 204]:
                     print("   -> Success")
                 elif response.status_code == 429:
-                    print("   -> Rate Limited! Sleeping extra.")
-                    time.sleep(5)
+                    retry_after = response.json().get('retry_after', 5)
+                    print(f"   -> Rate Limited! Sleeping for exact requested penalty: {retry_after}s")
+                    time.sleep(retry_after)
+                    response = requests.delete(url, headers=self.headers)
                 else:
                     print(f"   -> Failed: {response.status_code} - {response.text}")
 
-                # Random sleep
-                sleep_time = random.uniform(5, 8)
-                print(f"   -> Sleeping for {sleep_time:.2f} seconds...")
+                sleep_time = random.uniform(2.5, 4.5)
+                print(f"   -> Pacing for {sleep_time:.2f} seconds...")
                 time.sleep(sleep_time)
 
             except Exception as e:
