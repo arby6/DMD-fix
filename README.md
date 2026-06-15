@@ -44,15 +44,17 @@ Note: The tool uses your Discord authentication from a browser request. Keep it 
 Prebuilt versions are available (no Python required).
 
 ### Windows
-1. Go to the Releases page  
-2. Download `DMD.exe`  
-3. Run the application  
+1. Download the zip of the repo 
+2. Unpack the zip
+3. Install requirements
+4. Run the application  
 
-### macOS
-1. Go to the Releases page  
-2. Download `DMD.app` (zip)  
-3. Unzip and open it  
-   - You may need to allow it in system security settings
+### ~~macOS~~
+~~1. Go to the Releases page~~
+~~2. Download `DMD.app` (zip)~~  
+~~3. Unzip and open it~~  
+   ~~- You may need to allow it in system security settings~~
+### ⚠️ On macOS, use the official version from the original project instead of this fork, as because I have no clue how to make it work on macOS, you'll unfortunately be stuck with slow speeds.
 
 ---
 
